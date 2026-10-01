@@ -1,0 +1,44 @@
+{
+  "id": "crawl_65bfe20197ed4b9294872a9258fa8271",
+  "target_url": "https://www.kothiwalinstitutetechnology.com/index.html",
+  "status": "completed",
+  "strategy": "BFS",
+  "max_depth": 2,
+  "max_pages": 5,
+  "pages_crawled": 4,
+  "pages": [
+    {
+      "id": "page_001",
+      "url": "https://www.kothiwalinstitutetechnology.com/index.html",
+      "title": null,
+      "depth": 0,
+      "status": "success",
+      "content_available": true
+    },
+    {
+      "id": "page_002",
+      "url": "https://www.kothiwalinstitutetechnology.com/aboutus_kitps_history.html",
+      "title": null,
+      "depth": 0,
+      "status": "success",
+      "content_available": true
+    },
+    {
+      "id": "page_003",
+      "url": "https://www.kothiwalinstitutetechnology.com/aboutus_kitpsmission.html",
+      "title": null,
+      "depth": 0,
+      "status": "success",
+      "content_available": true
+    },
+    {
+      "id": "page_004",
+      "url": "https://www.kothiwalinstitutetechnology.com/aboutus_kitps.html",
+      "title": null,
+      "depth": 0,
+      "status": "success",
+      "content_available": true
+    }
+  ],
+  "links": []
+}
