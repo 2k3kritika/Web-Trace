@@ -1,3 +1,22 @@
+#run it using: streamlit run old_app.py
+
+"""This is a older version on Web Trace with streamlit basic UI
+  
+  To run:
+  **Install dependencies**:
+
+    ```bash
+    pip install streamlit crawl4ai
+    ```
+
+    **Set up `crawl4ai`**:
+
+    ```bash
+    crawl4ai-setup
+    ```
+
+"""
+
 import asyncio
 import zipfile
 import re
@@ -40,12 +59,20 @@ class CrawlerSettings:
 
 def extract_title(markdown: str, url: str) -> str:
     """Extracts a title from markdown H1, falling back to the URL slug."""
+    
+    #some crawl results may have no markdown content.
+    markdown = markdown or ""
+    
     # Find the first H1 header in the markdown content.
     match = re.search(r"^# (.+)", markdown, re.MULTILINE)
+
     # Use H1 as title, otherwise fallback to the URL's last segment.
     title = (
-        match[1].strip() if match else url.rstrip("/").split("/")[-1] or "Untitled_Page"
+        match[1].strip() 
+        if match 
+        else url.rstrip("/").split("/")[-1] or "Untitled_Page"
     )
+
     # Sanitize the title to be a valid filename.
     return re.sub(r"[^a-zA-Z0-9_-]", "_", title)
 
@@ -105,9 +132,12 @@ async def crawl_website_async(
     async with AsyncWebCrawler() as crawler:
         # Start the crawl and process results as they arrive.
         async for result in await crawler.arun(settings.url, config=config):
-            pages.append({"url": result.url, "markdown": result.markdown})
+            markdown = result.markdown or ""
+            url = result.url or settings.url  # Fallback to the base URL if result URL is missing
+            pages.append({"url": url, 
+                          "markdown": markdown})
             progress_cb(
-                len(pages), settings.max_pages, result.url
+                len(pages), settings.max_pages, url
             )  # Update UI progress
     return pages
 
