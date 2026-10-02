@@ -1,5 +1,6 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional
+
 
 class Page(BaseModel):
     id: str
@@ -9,12 +10,14 @@ class Page(BaseModel):
     status: str = "success"
     content_available: bool = True
 
+
 class Link(BaseModel):
     id: str
     url: str
     source: str
     target: str
     type: str = "internal"
+
 
 class Crawl(BaseModel):
     id: str
@@ -24,5 +27,5 @@ class Crawl(BaseModel):
     max_depth: int
     max_pages: int
     pages_crawled: int = 0
-    pages: List[Page] = []
-    links: List[Link] = []
+    pages: List[Page] = Field(default_factory=list)
+    links: List[Link] = Field(default_factory=list)

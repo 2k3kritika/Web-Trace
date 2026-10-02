@@ -187,3 +187,5 @@ crawled_pages
 .DS_Store
 
 frontend/
+
+backend/data/crawls

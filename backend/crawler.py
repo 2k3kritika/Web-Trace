@@ -81,26 +81,67 @@ async def crawl_website_async(
     settings: CrawlerSettings,
     progress_cb: Callable[[int, int, str], None],
 ) -> List[Dict]:
-    """Asynchronously crawls a website using the specified settings."""
+    """Asynchronously crawls a website and returns structured page data."""
+
     config = CrawlerRunConfig(
-        deep_crawl_strategy=build_strategy(settings),  # Strategy chosen in sidebar
-        scraping_strategy=LXMLWebScrapingStrategy(),  # Fast HTML parsing with lxml
+        deep_crawl_strategy=build_strategy(settings),
+        scraping_strategy=LXMLWebScrapingStrategy(),
         verbose=settings.verbose,
-        stream=True,  # Stream results to the UI
+        stream=True,
     )
+
     pages = []
-    # Initialize the crawler instance.
+
     async with AsyncWebCrawler() as crawler:
-        # Start the crawl and process results as they arrive.
-        async for result in await crawler.arun(settings.url, config=config):
+
+        async for result in await crawler.arun(
+            settings.url,
+            config=config
+        ):
+
             markdown = result.markdown or ""
-            url = result.url or settings.url  # Fallback to the base URL if result URL is missing
-            pages.append({"url": url, 
-                          "markdown": markdown})
+            url = result.url or settings.url
+
+            # Crawl4AI provides depth through result.metadata
+            depth = 0
+            if result.metadata:
+                depth = result.metadata.get("depth", 0)
+
+            # Extract links discovered on this page
+            links = {
+                "internal": result.links.get("internal", []),
+                "external": result.links.get("external", []),
+            }
+
+            pages.append(
+                {
+                    "url": url,
+                    "markdown": markdown,
+                    "title": extract_title(markdown, url),
+                    "depth": depth,
+                    "status_code": result.status_code,
+                    "success": result.success,
+                    "links": links,
+                }
+            )
+
             progress_cb(
-                len(pages), settings.max_pages, url
-            )  # Update UI progress
+                len(pages),
+                settings.max_pages,
+                url
+            )
+
     return pages
+
+
+def progress_callback(current_pages, max_pages, url):
+    print(f"[CRAWL] {current_pages}/{max_pages} - {url}")
+
+
+def run_crawl(settings):
+    return asyncio.run(
+        crawl_website_async(settings, progress_callback)
+    )
 
 def progress_callback(current_pages, max_pages, url):
     print(f"[CRAWL] {current_pages}/{max_pages} - {url}")
