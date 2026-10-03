@@ -186,6 +186,6 @@ archive/
 crawled_pages
 .DS_Store
 
-frontend/
+#/frontend/
 
 backend/data/crawls

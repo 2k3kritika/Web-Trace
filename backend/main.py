@@ -4,11 +4,21 @@ from uuid import uuid4
 from crawler import run_crawl, CrawlerSettings
 from models import Crawl, Page, Link
 from data import save_crawl, load_crawl
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(
     title="Web Trace API",          
     version="1.0.0"
     )
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 class CrawlRequest(BaseModel):
     url: str
