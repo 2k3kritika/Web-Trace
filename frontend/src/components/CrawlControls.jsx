@@ -6,6 +6,10 @@ function CrawlControls({ onCrawlComplete }) {
   const [maxPages, setMaxPages] = useState(10);
   const [strategy, setStrategy] = useState("BFS");
 
+  const [keywords, setKeywords] = useState("");
+  const [includeExternal, setIncludeExternal] = useState(false);
+  const [verbose, setVerbose] = useState(false);
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -19,6 +23,11 @@ function CrawlControls({ onCrawlComplete }) {
     setError(null);
 
     try {
+      const keywordList = keywords
+        .split(",")
+        .map((keyword) => keyword.trim())
+        .filter((keyword) => keyword.length > 0);
+
       const response = await fetch(
         "http://127.0.0.1:8000/api/crawls",
         {
@@ -31,9 +40,12 @@ function CrawlControls({ onCrawlComplete }) {
             max_depth: Number(maxDepth),
             max_pages: Number(maxPages),
             strategy: strategy,
-            include_external: false,
-            keywords: [],
-            verbose: false,
+            include_external: includeExternal,
+            keywords:
+              strategy === "BestFirst"
+                ? keywordList
+                : [],
+            verbose: verbose,
           }),
         }
       );
@@ -66,11 +78,14 @@ function CrawlControls({ onCrawlComplete }) {
     >
       <h2>Start New Crawl</h2>
 
+      {/* URL */}
       <input
         type="text"
         placeholder="https://example.com"
         value={url}
-        onChange={(event) => setUrl(event.target.value)}
+        onChange={(event) =>
+          setUrl(event.target.value)
+        }
         style={{
           width: "100%",
           padding: "10px",
@@ -79,11 +94,13 @@ function CrawlControls({ onCrawlComplete }) {
         }}
       />
 
+      {/* Main crawl settings */}
       <div
         style={{
           display: "flex",
           gap: "12px",
           marginBottom: "12px",
+          flexWrap: "wrap",
         }}
       >
         <input
@@ -114,19 +131,78 @@ function CrawlControls({ onCrawlComplete }) {
         >
           <option value="BFS">BFS</option>
           <option value="DFS">DFS</option>
-          <option value="BestFirst">BestFirst</option>
+          <option value="BestFirst">
+            BestFirst
+          </option>
         </select>
       </div>
 
+      {/* Best First keywords */}
+      {strategy === "BestFirst" && (
+        <input
+          type="text"
+          placeholder="Keywords (comma separated)"
+          value={keywords}
+          onChange={(event) =>
+            setKeywords(event.target.value)
+          }
+          style={{
+            width: "100%",
+            padding: "10px",
+            marginBottom: "12px",
+            boxSizing: "border-box",
+          }}
+        />
+      )}
+
+      {/* Extra options */}
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: "8px",
+          marginBottom: "15px",
+        }}
+      >
+        <label>
+          <input
+            type="checkbox"
+            checked={includeExternal}
+            onChange={(event) =>
+              setIncludeExternal(
+                event.target.checked
+              )
+            }
+          />{" "}
+          Include External Sites
+        </label>
+
+        <label>
+          <input
+            type="checkbox"
+            checked={verbose}
+            onChange={(event) =>
+              setVerbose(event.target.checked)
+            }
+          />{" "}
+          Verbose Mode
+        </label>
+      </div>
+
+      {/* Start button */}
       <button
         onClick={startCrawl}
         disabled={loading}
         style={{
           padding: "10px 18px",
-          cursor: loading ? "not-allowed" : "pointer",
+          cursor: loading
+            ? "not-allowed"
+            : "pointer",
         }}
       >
-        {loading ? "Crawling..." : "Start Crawl"}
+        {loading
+          ? "Starting..."
+          : "Start Crawl"}
       </button>
 
       {error && (

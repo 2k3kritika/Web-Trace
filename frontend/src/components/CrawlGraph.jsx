@@ -1,6 +1,10 @@
-import { useCallback, useState } from "react";
-import PageDetails from "./PageDetails";
+import {
+  useCallback,
+  useEffect,
+  useState,
+} from "react";
 
+import PageDetails from "./PageDetails";
 
 import {
   ReactFlow,
@@ -16,24 +20,48 @@ import "@xyflow/react/dist/style.css";
 
 import PageNode from "./PageNode";
 
-
-function CrawlGraph({ initialNodes = [], initialEdges = [] }) {
+function CrawlGraph({
+  initialNodes = [],
+  initialEdges = [],
+}) {
   const [nodes, setNodes, onNodesChange] =
     useNodesState(initialNodes);
-
-  const [selectedNode, setSelectedNode] = useState(null);
-
-  const onNodeClick = useCallback((event, node) => {
-  setSelectedNode(node);
-   }, []);
 
   const [edges, setEdges, onEdgesChange] =
     useEdgesState(initialEdges);
 
-  const nodeTypes = {
-    page: PageNode,
-  };
+  useEffect(() => {
+    setNodes(initialNodes);
+  }, [initialNodes, setNodes]);
+  useEffect(() => {
+    setEdges(initialEdges);
+  }, [initialEdges, setEdges]);
 
+  const [selectedNode, setSelectedNode] =
+    useState(null);
+
+  /*
+   * Update React Flow whenever new crawl
+   * nodes arrive from the backend.
+   */
+  useEffect(() => {
+    setNodes(initialNodes);
+  }, [initialNodes, setNodes]);
+
+  /*
+   * Update React Flow whenever new crawl
+   * edges arrive from the backend.
+   */
+  useEffect(() => {
+    setEdges(initialEdges);
+  }, [initialEdges, setEdges]);
+
+  const onNodeClick = useCallback(
+    (event, node) => {
+      setSelectedNode(node);
+    },
+    []
+  );
 
   const onConnect = useCallback(
     (connection) => {
@@ -44,37 +72,41 @@ function CrawlGraph({ initialNodes = [], initialEdges = [] }) {
     [setEdges]
   );
 
+  const nodeTypes = {
+    page: PageNode,
+  };
 
   return (
-  <div
-    style={{
-      width: "100%",
-      height: "700px",
-      position: "relative",
-    }}
-  >
-    <ReactFlow
-      nodes={nodes}
-      edges={edges}
-      nodeTypes={nodeTypes}
-      onNodesChange={onNodesChange}
-      onEdgesChange={onEdgesChange}
-      onConnect={onConnect}
-      onNodeClick={onNodeClick}
-      fitView
+    <div
+      style={{
+        width: "100%",
+        height: "700px",
+        position: "relative",
+      }}
     >
-      <Background />
-      <Controls />
-      <MiniMap />
-    </ReactFlow>
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        nodeTypes={nodeTypes}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        onConnect={onConnect}
+        onNodeClick={onNodeClick}
+        fitView
+      >
+        <Background />
+        <Controls />
+        <MiniMap />
+      </ReactFlow>
 
-    <PageDetails
-      node={selectedNode}
-      onClose={() => setSelectedNode(null)}
-    />
-  </div>
-);
+      <PageDetails
+        node={selectedNode}
+        onClose={() =>
+          setSelectedNode(null)
+        }
+      />
+    </div>
+  );
 }
-
 
 export default CrawlGraph;

@@ -2,143 +2,225 @@ import { useEffect, useState } from "react";
 
 import CrawlGraph from "./components/CrawlGraph";
 import CrawlControls from "./components/CrawlControls";
-
 import buildHierarchy from "./utils/buildHierarchy";
+
+
+const API_URL = "http://127.0.0.1:8000";
 
 
 function App() {
   const [crawlId, setCrawlId] = useState(null);
-  const [graphData, setGraphData] = useState(null);
+
+  const [graphData, setGraphData] = useState({
+    crawl_id: null,
+    nodes: [],
+    edges: [],
+  });
 
   const [progress, setProgress] = useState(null);
 
   const [loading, setLoading] = useState(false);
+
   const [error, setError] = useState(null);
 
 
+  // ---------------------------------------------------------
+  // Start a new crawl
+  // ---------------------------------------------------------
+
   function handleCrawlComplete(id) {
     setCrawlId(id);
-    setGraphData(null);
-    setProgress(null);
+
+    setGraphData({
+      crawl_id: id,
+      nodes: [],
+      edges: [],
+    });
+
+    setProgress({
+      current: 0,
+      max_pages: 0,
+      url: "",
+      status: "pending",
+    });
+
     setError(null);
     setLoading(true);
   }
 
 
+  // ---------------------------------------------------------
+  // Fetch graph data
+  // ---------------------------------------------------------
+
   async function fetchGraph(id) {
     try {
       const response = await fetch(
-        `http://127.0.0.1:8000/api/crawls/${id}/graph`
+        `${API_URL}/api/crawls/${id}/graph`
       );
 
       if (!response.ok) {
-        throw new Error(
-          `Failed to fetch graph: ${response.status}`
-        );
+        return;
       }
 
       const data = await response.json();
 
-      console.log("Graph data:", data);
-
       setGraphData(data);
-      setLoading(false);
 
     } catch (err) {
       console.error(
         "Graph fetch error:",
         err
       );
-
-      setError(err.message);
-      setLoading(false);
     }
   }
 
+
+  // ---------------------------------------------------------
+  // Monitor crawl progress + graph
+  // ---------------------------------------------------------
 
   useEffect(() => {
     if (!crawlId) {
       return;
     }
 
-    let intervalId;
+    let stopped = false;
+    let interval = null;
 
 
-    async function checkProgress() {
+    async function updateCrawl() {
       try {
-        const response = await fetch(
-          `http://127.0.0.1:8000/api/crawls/${crawlId}/progress`
-        );
 
-        if (!response.ok) {
-          throw new Error(
-            `Failed to fetch progress: ${response.status}`
+        // ---------------------------------------------
+        // Fetch progress
+        // ---------------------------------------------
+
+        const progressResponse =
+          await fetch(
+            `${API_URL}/api/crawls/${crawlId}/progress`
           );
+
+        if (!progressResponse.ok) {
+          return;
         }
 
-        const data = await response.json();
-
-        console.log("Progress:", data);
-
-        setProgress(data);
+        const progressData =
+          await progressResponse.json();
 
 
-        if (data.status === "completed") {
-          clearInterval(intervalId);
-
-          await fetchGraph(crawlId);
+        if (stopped) {
+          return;
         }
 
 
-        if (data.status === "failed") {
-          clearInterval(intervalId);
+        setProgress(progressData);
 
+
+        // ---------------------------------------------
+        // Fetch latest graph
+        // ---------------------------------------------
+
+        await fetchGraph(crawlId);
+
+
+        if (stopped) {
+          return;
+        }
+
+
+        // ---------------------------------------------
+        // Crawl completed
+        // ---------------------------------------------
+
+        if (
+          progressData.status ===
+          "completed"
+        ) {
+          setLoading(false);
+
+          stopped = true;
+
+          if (interval) {
+            clearInterval(interval);
+            interval = null;
+          }
+
+          return;
+        }
+
+
+        // ---------------------------------------------
+        // Crawl failed
+        // ---------------------------------------------
+
+        if (
+          progressData.status ===
+          "failed"
+        ) {
           setLoading(false);
 
           setError(
-            data.error || "Crawl failed."
+            progressData.error ||
+              "Crawl failed."
           );
+
+          stopped = true;
+
+          if (interval) {
+            clearInterval(interval);
+            interval = null;
+          }
+
+          return;
         }
 
       } catch (err) {
+
         console.error(
           "Progress fetch error:",
           err
         );
 
-        clearInterval(intervalId);
-
-        setLoading(false);
-
-        setError(err.message);
       }
     }
 
 
-    checkProgress();
+    // ---------------------------------------------
+    // Run immediately
+    // ---------------------------------------------
 
-    intervalId = setInterval(
-      checkProgress,
-      1000
+    updateCrawl();
+
+
+    // ---------------------------------------------
+    // Continue checking while crawl is active
+    // ---------------------------------------------
+
+    interval = setInterval(
+      updateCrawl,
+      500
     );
 
 
+    // ---------------------------------------------
+    // Cleanup
+    // ---------------------------------------------
+
     return () => {
-      clearInterval(intervalId);
+      stopped = true;
+
+      if (interval) {
+        clearInterval(interval);
+      }
     };
 
   }, [crawlId]);
 
 
-  /*
-   * Convert backend graph data into
-   * React Flow nodes and edges.
-   *
-   * The nodes are then passed through
-   * buildHierarchy() so their positions
-   * are based on the actual page
-   * relationships.
-   */
+  // ---------------------------------------------------------
+  // Build hierarchy layout
+  // ---------------------------------------------------------
 
   let nodes = [];
   let edges = [];
@@ -146,39 +228,48 @@ function App() {
 
   if (graphData) {
 
-    // Convert backend edges
-    edges = graphData.edges.map(
-      (edge) => ({
-        id: edge.id,
-        source: edge.source,
-        target: edge.target,
-      })
-    );
+    // ---------------------------------------------
+    // Convert edges
+    // ---------------------------------------------
+
+    edges = (
+      graphData.edges || []
+    ).map((edge) => ({
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+    }));
 
 
-    // Create base React Flow nodes
-    const baseNodes = graphData.nodes.map(
-      (node) => ({
-        id: node.id,
+    // ---------------------------------------------
+    // Convert backend nodes
+    // ---------------------------------------------
 
-        type: "page",
+    const baseNodes = (
+      graphData.nodes || []
+    ).map((node) => ({
+      id: node.id,
 
-        position: {
-          x: 0,
-          y: 0,
-        },
+      type: "page",
 
-        data: {
-          label: node.label,
-          url: node.url,
-          depth: node.depth,
-          status: node.status,
-        },
-      })
-    );
+      position: {
+        x: 0,
+        y: 0,
+      },
+
+      data: {
+        label: node.label,
+        url: node.url,
+        depth: node.depth,
+        status: node.status,
+      },
+    }));
 
 
-    // Arrange nodes into hierarchy
+    // ---------------------------------------------
+    // Build hierarchical layout
+    // ---------------------------------------------
+
     nodes = buildHierarchy(
       baseNodes,
       edges
@@ -186,56 +277,68 @@ function App() {
   }
 
 
-  const progressPercent =
-    progress && progress.max_pages > 0
-      ? Math.min(
-          (progress.current /
-            progress.max_pages) *
-            100,
-          100
-        )
-      : 0;
+  // ---------------------------------------------------------
+  // Download ZIP
+  // ---------------------------------------------------------
+
+  function downloadCrawl() {
+    if (!crawlId) {
+      return;
+    }
+
+    window.open(
+      `${API_URL}/api/crawls/${crawlId}/download`,
+      "_blank"
+    );
+  }
 
 
-  // Crawl statistics
-
-  const pageCount = graphData
-    ? graphData.nodes.length
-    : 0;
-
-
-  const linkCount = graphData
-    ? graphData.edges.length
-    : 0;
-
-
-  const maxDepth = graphData
-    ? graphData.nodes.reduce(
-        (max, node) =>
-          Math.max(
-            max,
-            node.depth || 0
-          ),
-        0
-      )
-    : 0;
-
+  // ---------------------------------------------------------
+  // UI
+  // ---------------------------------------------------------
 
   return (
     <div
       style={{
         minHeight: "100vh",
-        padding: "20px",
-        boxSizing: "border-box",
-        background: "#080b14",
+        background: "#080B14",
         color: "#ffffff",
+        padding: "30px",
+        boxSizing: "border-box",
       }}
     >
 
-      <h1>
-        Web Trace
-      </h1>
+      {/* Header */}
 
+      <div
+        style={{
+          marginBottom: "25px",
+        }}
+      >
+
+        <h1
+          style={{
+            margin: 0,
+            marginBottom: "8px",
+          }}
+        >
+          Web Trace
+        </h1>
+
+
+        <p
+          style={{
+            margin: 0,
+            color: "#9ca3af",
+          }}
+        >
+          Website crawler and visual site map
+        </p>
+
+      </div>
+
+
+      {/* Crawl controls */}
 
       <CrawlControls
         onCrawlComplete={
@@ -244,48 +347,68 @@ function App() {
       />
 
 
-      {/* Live crawl progress */}
+      {/* Error */}
 
-      {loading && progress && (
-
+      {error && (
         <div
           style={{
-            padding: "20px",
+            padding: "12px 16px",
             marginBottom: "20px",
-            background: "#111827",
+            background: "#3f1d1d",
+            border: "1px solid #7f1d1d",
+            borderRadius: "8px",
+            color: "#fca5a5",
+          }}
+        >
+          {error}
+        </div>
+      )}
+
+
+      {/* Crawl progress */}
+
+      {progress && (
+        <div
+          style={{
+            padding: "18px",
+            background: "#111725",
             borderRadius: "12px",
-            color: "#ffffff",
+            marginBottom: "20px",
           }}
         >
 
-          <h2
-            style={{
-              marginTop: 0,
-            }}
-          >
-            Crawling...
-          </h2>
-
-
           <div
             style={{
+              display: "flex",
+              justifyContent:
+                "space-between",
+              alignItems: "center",
               marginBottom: "10px",
-              color: "#9ca3af",
             }}
           >
-            Pages crawled:{" "}
 
-            <strong
-              style={{
-                color: "#ffffff",
-              }}
-            >
-              {progress.current}
+            <strong>
+              {progress.status ===
+              "completed"
+                ? "Crawl Completed"
+                : progress.status ===
+                  "failed"
+                ? "Crawl Failed"
+                : "Crawling..."}
             </strong>
 
-            {" / "}
 
-            {progress.max_pages}
+            <span
+              style={{
+                color: "#9ca3af",
+              }}
+            >
+              {progress.current || 0}
+              {" / "}
+              {progress.max_pages || 0}
+              {" pages"}
+            </span>
+
           </div>
 
 
@@ -294,290 +417,289 @@ function App() {
           <div
             style={{
               width: "100%",
-              height: "10px",
-              background: "#374151",
-              borderRadius: "10px",
+              height: "8px",
+              background: "#1f2937",
+              borderRadius: "999px",
               overflow: "hidden",
-              marginBottom: "14px",
+              marginBottom: "12px",
             }}
           >
 
             <div
               style={{
-                width: `${progressPercent}%`,
+                width:
+                  progress.max_pages > 0
+                    ? `${Math.min(
+                        100,
+                        (
+                          progress.current /
+                          progress.max_pages
+                        ) * 100
+                      )}%`
+                    : "0%",
+
                 height: "100%",
-                background: "#2563eb",
+
+                background:
+                  "#6366f1",
+
                 transition:
-                  "width 0.4s ease",
+                  "width 0.3s ease",
               }}
             />
 
           </div>
 
 
-          {/* Current page */}
+          {/* Current URL */}
 
-          <div
-            style={{
-              fontSize: "13px",
-              color: "#9ca3af",
-              wordBreak: "break-all",
-            }}
-          >
-            Current page:{" "}
-
-            <span
+          {progress.url && (
+            <div
               style={{
-                color: "#d1d5db",
+                fontSize: "13px",
+                color: "#9ca3af",
+                overflow: "hidden",
+                textOverflow:
+                  "ellipsis",
+                whiteSpace: "nowrap",
               }}
             >
+              Current page:{" "}
               {progress.url}
-            </span>
-
-          </div>
+            </div>
+          )}
 
         </div>
-
       )}
 
 
-      {/* Error */}
+      {/* Live graph */}
 
-      {error && (
-
-        <div
-          style={{
-            padding: "14px",
-            marginBottom: "20px",
-            background: "#3f1d1d",
-            color: "#f87171",
-            borderRadius: "8px",
-          }}
-        >
-          {error}
-        </div>
-
-      )}
-
-
-      {/* Crawl Summary */}
-
-      {graphData && !loading && (
-
-        <div
-          style={{
-            marginBottom: "20px",
-          }}
-        >
-
-          <h2
-            style={{
-              marginBottom: "14px",
-            }}
-          >
-            Crawl Summary
-          </h2>
-
-
+      {graphData.nodes &&
+        graphData.nodes.length > 0 && (
           <div
             style={{
-              display: "grid",
-              gridTemplateColumns:
-                "repeat(4, 1fr)",
-              gap: "14px",
+              background: "#0D111C",
+              borderRadius: "12px",
+              padding: "10px",
+              marginBottom: "20px",
             }}
           >
 
-            {/* Pages */}
-
             <div
               style={{
-                padding: "18px",
-                background: "#111725",
-                borderRadius: "12px",
-                border:
-                  "1px solid #1f2937",
+                padding:
+                  "10px 14px",
+                display: "flex",
+                justifyContent:
+                  "space-between",
+                alignItems: "center",
               }}
             >
 
-              <div
+              <h2
                 style={{
-                  fontSize: "12px",
+                  margin: 0,
+                }}
+              >
+                Crawl Graph
+              </h2>
+
+
+              <span
+                style={{
                   color: "#9ca3af",
-                  marginBottom: "8px",
+                  fontSize: "13px",
                 }}
               >
-                Pages
-              </div>
-
-
-              <div
-                style={{
-                  fontSize: "28px",
-                  fontWeight: "600",
-                }}
-              >
-                {pageCount}
-              </div>
+                {nodes.length} pages
+                {" • "}
+                {edges.length} links
+              </span>
 
             </div>
 
 
-            {/* Links */}
-
-            <div
-              style={{
-                padding: "18px",
-                background: "#111725",
-                borderRadius: "12px",
-                border:
-                  "1px solid #1f2937",
-              }}
-            >
-
-              <div
-                style={{
-                  fontSize: "12px",
-                  color: "#9ca3af",
-                  marginBottom: "8px",
-                }}
-              >
-                Links
-              </div>
-
-
-              <div
-                style={{
-                  fontSize: "28px",
-                  fontWeight: "600",
-                }}
-              >
-                {linkCount}
-              </div>
-
-            </div>
-
-
-            {/* Depth */}
-
-            <div
-              style={{
-                padding: "18px",
-                background: "#111725",
-                borderRadius: "12px",
-                border:
-                  "1px solid #1f2937",
-              }}
-            >
-
-              <div
-                style={{
-                  fontSize: "12px",
-                  color: "#9ca3af",
-                  marginBottom: "8px",
-                }}
-              >
-                Max Depth
-              </div>
-
-
-              <div
-                style={{
-                  fontSize: "28px",
-                  fontWeight: "600",
-                }}
-              >
-                {maxDepth}
-              </div>
-
-            </div>
-
-
-            {/* Status */}
-
-            <div
-              style={{
-                padding: "18px",
-                background: "#111725",
-                borderRadius: "12px",
-                border:
-                  "1px solid #1f2937",
-              }}
-            >
-
-              <div
-                style={{
-                  fontSize: "12px",
-                  color: "#9ca3af",
-                  marginBottom: "8px",
-                }}
-              >
-                Status
-              </div>
-
-
-              <div
-                style={{
-                  fontSize: "20px",
-                  fontWeight: "600",
-                  color: "#4ade80",
-                }}
-              >
-                ✓ Completed
-              </div>
-
-            </div>
+            <CrawlGraph
+              initialNodes={nodes}
+              initialEdges={edges}
+            />
 
           </div>
+        )}
 
 
-          {/* Crawl information */}
+      {/* Empty state */}
 
+      {!loading &&
+        (!graphData.nodes ||
+          graphData.nodes.length ===
+            0) &&
+        !error && (
           <div
             style={{
-              marginTop: "14px",
-              padding: "14px 18px",
+              padding: "50px 20px",
+              textAlign: "center",
+              color: "#6b7280",
+              background: "#0D111C",
+              borderRadius: "12px",
+            }}
+          >
+            Enter a URL above to start
+            crawling.
+          </div>
+        )}
+
+
+      {/* Summary */}
+
+      {graphData.nodes &&
+        graphData.nodes.length > 0 &&
+        !loading && (
+          <div
+            style={{
+              padding: "20px",
               background: "#111725",
               borderRadius: "12px",
-              border:
-                "1px solid #1f2937",
-              fontSize: "13px",
-              color: "#9ca3af",
+              marginBottom: "20px",
             }}
           >
 
-            <strong
+            <h2
               style={{
-                color: "#ffffff",
+                marginTop: 0,
               }}
             >
-              Target:
-            </strong>{" "}
+              Crawl Summary
+            </h2>
 
-            {graphData.crawl_id}
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns:
+                  "repeat(auto-fit, minmax(150px, 1fr))",
+                gap: "12px",
+              }}
+            >
+
+              {/* Pages */}
+
+              <div>
+                <strong>
+                  Pages
+                </strong>
+
+                <div
+                  style={{
+                    color: "#9ca3af",
+                    marginTop: "4px",
+                  }}
+                >
+                  {graphData.nodes.length}
+                </div>
+              </div>
+
+
+              {/* Links */}
+
+              <div>
+                <strong>
+                  Links
+                </strong>
+
+                <div
+                  style={{
+                    color: "#9ca3af",
+                    marginTop: "4px",
+                  }}
+                >
+                  {graphData.edges.length}
+                </div>
+              </div>
+
+
+              {/* Max Depth */}
+
+              <div>
+                <strong>
+                  Max Depth
+                </strong>
+
+                <div
+                  style={{
+                    color: "#9ca3af",
+                    marginTop: "4px",
+                  }}
+                >
+                  {graphData.nodes.length > 0
+                    ? Math.max(
+                        ...graphData.nodes.map(
+                          (node) =>
+                            node.depth || 0
+                        )
+                      )
+                    : 0}
+                </div>
+              </div>
+
+
+              {/* Status */}
+
+              <div>
+                <strong>
+                  Status
+                </strong>
+
+                <div
+                  style={{
+                    color:
+                      progress?.status ===
+                      "completed"
+                        ? "#4ade80"
+                        : progress?.status ===
+                          "failed"
+                        ? "#f87171"
+                        : "#facc15",
+
+                    marginTop: "4px",
+                  }}
+                >
+                  {progress?.status ===
+                  "completed"
+                    ? "Completed"
+                    : progress?.status ===
+                      "failed"
+                    ? "Failed"
+                    : "In Progress"}
+                </div>
+              </div>
+
+            </div>
+
+
+            {/* Download */}
+
+            <button
+              onClick={downloadCrawl}
+              style={{
+                marginTop: "20px",
+                padding: "10px 18px",
+                border: "none",
+                borderRadius: "8px",
+                background: "#4f46e5",
+                color: "#ffffff",
+                cursor: "pointer",
+              }}
+            >
+              Download Crawl ZIP
+            </button>
 
           </div>
-
-        </div>
-
-      )}
-
-
-      {/* Graph */}
-
-      {graphData && !loading && (
-
-        <CrawlGraph
-          key={crawlId}
-          initialNodes={nodes}
-          initialEdges={edges}
-        />
-
-      )}
+        )}
 
     </div>
   );
 }
-
 
 export default App;

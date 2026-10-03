@@ -9,6 +9,7 @@ class Page(BaseModel):
     depth: int = 0
     status: str = "success"
     content_available: bool = True
+    markdown: Optional[str] = None
 
 
 class Link(BaseModel):
