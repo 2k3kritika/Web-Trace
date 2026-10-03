@@ -146,7 +146,7 @@ def run_crawl(settings):
 def progress_callback(current_pages, max_pages, url):
     print(f"[CRAWL] {current_pages}/{max_pages} - {url}")
 
-def run_crawl(settings):
+def run_crawl(settings, progress_cb):
     return asyncio.run(
-        crawl_website_async(settings, progress_callback)
+        crawl_website_async(settings, progress_cb)
     )
